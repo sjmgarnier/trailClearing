@@ -1,0 +1,378 @@
+---
+title: 'Notebook #3'
+author: "Simon Garnier"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    fig_height: 6
+    fig_width: 9
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+---
+
+--- 
+
+# Data
+
+```{r, message=FALSE}
+# load required libraries
+if (!require(pacman)) install.packages("pacman")
+p_load(readr, dplyr, broom, ggplot2, cowplot, sjPlot, lme4)
+
+# load data
+num2 <- read_csv("../../data/num2.csv")
+num2
+  
+prop2 <- read_csv("../../data/prop2.csv")
+prop2
+
+num4 <- read_csv("../../data/num4.csv")
+num4
+  
+prop4 <- read_csv("../../data/prop4.csv")
+prop4
+```
+
+[Back to top]("#")
+
+---
+
+# Day 2
+
+## Number of blades cleared
+
+### Graph
+
+```{r, warning=FALSE, message=FALSE, fig.height=6, fig.width=6}
+ggplot(num2, aes(x = Length, y = Numbercleared, color = Hardness, group = Hardness)) +
+  geom_jitter(alpha = 0.25, width = 0.05) +
+  stat_summary(fun.y = mean, geom = "point", size = 4) +
+  stat_summary(fun.y = mean, geom = "line") +
+  ylab("Number of blades cleared") +
+  scale_color_brewer("Hardness", palette = "Dark2") + 
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+```
+
+---
+
+### Model selection 
+
+Note: a first pass at the model showed that the residuals weren't very clean. 
+I used a square root transformation to correct some of it. 
+
+```{r, warning=FALSE, message=FALSE}
+m_full_num_2 <- lmer(sqrt(Numbercleared) ~ Length * Hardness + (1 | ColonyID), data = num2, REML = FALSE)
+m_no_interaction_num_2 <- lmer(sqrt(Numbercleared) ~ Length + Hardness + (1 | ColonyID), data = num2, REML = FALSE)
+anova(m_full_num_2, m_no_interaction_num_2)
+```
+
+There is a statistical difference between the full model and the model without 
+interaction.We'll continue with the full model. 
+
+---
+
+### Model diagnostic
+
+```{r, fig.height=9, fig.width=9, message=FALSE, warning=FALSE}
+diagnostic <- augment(m_full_num_2)
+
+a <- ggplot(diagnostic, aes(x = .fitted, y = .wtres)) +
+  geom_point() +
+  geom_hline(yintercept = 0) +
+  geom_smooth(se = FALSE) +
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+
+b <- ggplot(diagnostic, aes(x = .fitted, y = sqrt(abs(.wtres)))) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+
+y <- quantile(diagnostic$.resid, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y) / diff(x)
+int   <- y[1] - slope * x[1]     
+c <- ggplot(fortify(m_full_num_2), aes(sample = .resid)) +
+  geom_qq() +
+  geom_abline(intercept = int, slope = slope) +
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+
+cowplot::plot_grid(a, b, c)
+```
+
+Not perfect, but that'll do. 
+
+---
+
+### Model evaluation
+
+```{r, warning=FALSE, message=FALSE, fig.height=6, fig.width=6}
+sjp.lmer(m_full_num_2, type = "fe", prnt.plot = FALSE)$plot +
+  theme_minimal(base_size = 18) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+`r sjt.lmer(m_full_num_2, no.output = TRUE, CSS = list(css.table = "width: 100%;"))$knitr`
+
+[Back to top]("#")
+
+---
+
+## Proportion of blades cleared
+
+### Graph
+
+```{r, warning=FALSE, message=FALSE, fig.height=6, fig.width=6}
+ggplot(prop2, aes(x = Length, y = Propcleared, color = Hardness, group = Hardness)) +
+  geom_jitter(alpha = 0.25, width = 0.05) +
+  stat_summary(fun.y = mean, geom = "point", size = 4) +
+  stat_summary(fun.y = mean, geom = "line") +
+  ylab("Proportion of blades cleared") +
+  scale_color_brewer("Hardness", palette = "Dark2") + 
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+```
+
+---
+
+### Model selection 
+
+Note: a first pass at the model showed that the residuals weren't very clean. 
+I used a square root transformation to correct some of it. 
+
+```{r, warning=FALSE, message=FALSE}
+m_full_prop_2 <- lmer(sqrt(Propcleared) ~ Length * Hardness + (1 | ColonyID), data = prop2, REML = FALSE)
+m_no_interaction_prop_2 <- lmer(sqrt(Propcleared) ~ Length + Hardness + (1 | ColonyID), data = prop2, REML = FALSE)
+anova(m_full_prop_2, m_no_interaction_prop_2)
+```
+
+No statistical difference between the full model and the model without interaction. 
+We'll continue with the model without interaction. 
+
+---
+
+### Model diagnostic
+
+```{r, fig.height=9, fig.width=9, message=FALSE, warning=FALSE}
+diagnostic <- augment(m_no_interaction_prop_2)
+
+a <- ggplot(diagnostic, aes(x = .fitted, y = .wtres)) +
+  geom_point() +
+  geom_hline(yintercept = 0) +
+  geom_smooth(se = FALSE) +
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+
+b <- ggplot(diagnostic, aes(x = .fitted, y = sqrt(abs(.wtres)))) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+
+y <- quantile(diagnostic$.resid, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y) / diff(x)
+int   <- y[1] - slope * x[1]     
+c <- ggplot(fortify(m_no_interaction_prop_2), aes(sample = .resid)) +
+  geom_qq() +
+  geom_abline(intercept = int, slope = slope) +
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+
+cowplot::plot_grid(a, b, c)
+```
+
+Not perfect, but that'll do. 
+
+---
+
+### Model evaluation
+
+```{r, warning=FALSE, message=FALSE, fig.height=6, fig.width=6}
+sjp.lmer(m_no_interaction_prop_2, type = "fe", prnt.plot = FALSE)$plot +
+  theme_minimal(base_size = 18) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+`r sjt.lmer(m_no_interaction_prop_2, no.output = TRUE, CSS = list(css.table = "width: 100%;"))$knitr`
+
+[Back to top]("#")
+
+---
+
+
+
+
+
+# Day 4
+
+## Number of blades cleared
+
+### Graph
+
+```{r, warning=FALSE, message=FALSE, fig.height=6, fig.width=6}
+ggplot(num4, aes(x = Length, y = Numbercleared, color = Hardness, group = Hardness)) +
+  geom_jitter(alpha = 0.25, width = 0.05) +
+  stat_summary(fun.y = mean, geom = "point", size = 4) +
+  stat_summary(fun.y = mean, geom = "line") +
+  ylab("Number of blades cleared") +
+  scale_color_brewer("Hardness", palette = "Dark2") + 
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+```
+
+---
+
+### Model selection 
+
+Note: a first pass at the model showed that the residuals weren't very clean. 
+I used a square root transformation to correct some of it. 
+
+```{r, warning=FALSE, message=FALSE}
+m_full_num_4 <- lmer(sqrt(Numbercleared) ~ Length * Hardness + (1 | ColonyID), data = num4, REML = FALSE)
+m_no_interaction_num_4 <- lmer(sqrt(Numbercleared) ~ Length + Hardness + (1 | ColonyID), data = num4, REML = FALSE)
+anova(m_full_num_4, m_no_interaction_num_4)
+```
+
+No statistical difference between the full model and the model without interaction. 
+We'll continue with the model without interaction.
+
+---
+
+### Model diagnostic
+
+```{r, fig.height=9, fig.width=9, message=FALSE, warning=FALSE}
+diagnostic <- augment(m_no_interaction_num_4)
+
+a <- ggplot(diagnostic, aes(x = .fitted, y = .wtres)) +
+  geom_point() +
+  geom_hline(yintercept = 0) +
+  geom_smooth(se = FALSE) +
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+
+b <- ggplot(diagnostic, aes(x = .fitted, y = sqrt(abs(.wtres)))) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+
+y <- quantile(diagnostic$.resid, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y) / diff(x)
+int   <- y[1] - slope * x[1]     
+c <- ggplot(fortify(m_no_interaction_num_4), aes(sample = .resid)) +
+  geom_qq() +
+  geom_abline(intercept = int, slope = slope) +
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+
+cowplot::plot_grid(a, b, c)
+```
+
+Not perfect, but that'll do. 
+
+---
+
+### Model evaluation
+
+```{r, warning=FALSE, message=FALSE, fig.height=6, fig.width=6}
+sjp.lmer(m_no_interaction_num_4, type = "fe", prnt.plot = FALSE)$plot +
+  theme_minimal(base_size = 18) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+`r sjt.lmer(m_no_interaction_num_4, no.output = TRUE, CSS = list(css.table = "width: 100%;"))$knitr`
+
+[Back to top]("#")
+
+---
+
+## Proportion of blades cleared
+
+### Graph
+
+```{r, warning=FALSE, message=FALSE, fig.height=6, fig.width=6}
+ggplot(prop4, aes(x = Length, y = Propcleared, color = Hardness, group = Hardness)) +
+  geom_jitter(alpha = 0.25, width = 0.05) +
+  stat_summary(fun.y = mean, geom = "point", size = 4) +
+  stat_summary(fun.y = mean, geom = "line") +
+  ylab("Proportion of blades cleared") +
+  scale_color_brewer("Hardness", palette = "Dark2") + 
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+```
+
+---
+
+### Model selection 
+
+Note: a first pass at the model showed that the residuals weren't very clean. 
+I used a square root transformation to correct some of it. 
+
+```{r, warning=FALSE, message=FALSE}
+m_full_prop_4 <- lmer(sqrt(Propcleared) ~ Length * Hardness + (1 | ColonyID), data = prop4, REML = FALSE)
+m_no_interaction_prop_4 <- lmer(sqrt(Propcleared) ~ Length + Hardness + (1 | ColonyID), data = prop4, REML = FALSE)
+anova(m_full_prop_4, m_no_interaction_prop_4)
+```
+
+No statistical difference between the full model and the model without interaction. 
+We'll continue with the model without interaction. 
+
+---
+
+### Model diagnostic
+
+```{r, fig.height=9, fig.width=9, message=FALSE, warning=FALSE}
+diagnostic <- augment(m_no_interaction_prop_4)
+
+a <- ggplot(diagnostic, aes(x = .fitted, y = .wtres)) +
+  geom_point() +
+  geom_hline(yintercept = 0) +
+  geom_smooth(se = FALSE) +
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+
+b <- ggplot(diagnostic, aes(x = .fitted, y = sqrt(abs(.wtres)))) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+
+y <- quantile(diagnostic$.resid, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y) / diff(x)
+int   <- y[1] - slope * x[1]     
+c <- ggplot(fortify(m_no_interaction_prop_4), aes(sample = .resid)) +
+  geom_qq() +
+  geom_abline(intercept = int, slope = slope) +
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+
+cowplot::plot_grid(a, b, c)
+```
+
+Not perfect, but that'll do. 
+
+---
+
+### Model evaluation
+
+```{r, warning=FALSE, message=FALSE, fig.height=6, fig.width=6}
+sjp.lmer(m_no_interaction_prop_4, type = "fe", prnt.plot = FALSE)$plot +
+  theme_minimal(base_size = 18) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+`r sjt.lmer(m_no_interaction_prop_4, no.output = TRUE, CSS = list(css.table = "width: 100%;"))$knitr`
+
+[Back to top]("#")
+
+---
+
+

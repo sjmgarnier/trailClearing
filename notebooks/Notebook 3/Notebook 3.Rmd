@@ -1,0 +1,190 @@
+---
+title: 'Notebook #3'
+author: "Simon Garnier"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    fig_height: 6
+    fig_width: 9
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+---
+
+--- 
+
+# Data
+
+```{r, message=FALSE}
+# load required libraries
+if (!require(pacman)) install.packages("pacman")
+p_load(readr, dplyr, broom, ggplot2, cowplot, sjPlot, lme4)
+
+# load data
+eliza2 <- read_csv("../../data/eliza2.csv")
+eliza2
+
+eliza4 <- read_csv("../../data/eliza4.csv")
+eliza4
+```
+
+[Back to top]("#")
+
+---
+
+# Day 2
+
+## Graph
+
+```{r, warning=FALSE, message=FALSE, fig.height=6, fig.width=6}
+ggplot(eliza2, aes(x = Length, y = mean_norm, color = Hardness, group = Hardness)) +
+  geom_jitter(alpha = 0.25, width = 0.05) +
+  stat_summary(fun.y = mean, geom = "point", size = 4) +
+  stat_summary(fun.y = mean, geom = "line") +
+  ylim(-0.001, 1) +
+  ylab("Normalised minimum percolation time") +
+  scale_color_brewer("Hardness", palette = "Dark2") + 
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+```
+
+---
+
+## Model selection 
+
+```{r, warning=FALSE, message=FALSE}
+m_full_2 <- lmer(mean_norm ~ Length * Hardness + (1 | Rep), data = eliza2, REML = FALSE)
+m_no_interaction_2 <- lmer(mean_norm ~ Length + Hardness + (1 | Rep), data = eliza2, REML = FALSE)
+anova(m_full_2, m_no_interaction_2)
+```
+
+No statistical difference between the full model and the model without interaction. 
+We'll continue with the model without interaction. 
+
+---
+
+## Model diagnostic
+
+```{r, fig.height=9, fig.width=9, message=FALSE, warning=FALSE}
+diagnostic <- augment(m_no_interaction_2)
+
+a <- ggplot(diagnostic, aes(x = .fitted, y = .wtres)) +
+  geom_point() +
+  geom_hline(yintercept = 0) +
+  geom_smooth(se = FALSE) +
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+
+b <- ggplot(diagnostic, aes(x = .fitted, y = sqrt(abs(.wtres)))) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+
+y <- quantile(diagnostic$.resid, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y) / diff(x)
+int   <- y[1] - slope * x[1]     
+c <- ggplot(fortify(m_no_interaction_2), aes(sample = .resid)) +
+  geom_qq() +
+  geom_abline(intercept = int, slope = slope) +
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+
+cowplot::plot_grid(a, b, c)
+```
+
+Not perfect, but that'll do. 
+
+---
+
+## Model evaluation
+
+```{r, warning=FALSE, message=FALSE, fig.height=6, fig.width=6}
+sjp.lmer(m_no_interaction_2, type = "fe", prnt.plot = FALSE)$plot +
+  theme_minimal(base_size = 18) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+`r sjt.lmer(m_no_interaction_2, no.output = TRUE, CSS = list(css.table = "width: 100%;"))$knitr`
+
+[Back to top]("#")
+
+---
+
+# Day 4
+
+## Graph
+
+```{r, fig.height=6, fig.width=6}
+ggplot(eliza4, aes(x = Length, y = mean_norm, color = Hardness, group = Hardness)) +
+  geom_jitter(alpha = 0.25, width = 0.05) +
+  stat_summary(fun.y = mean, geom = "point", size = 4) +
+  stat_summary(fun.y = mean, geom = "line") +
+  ylim(-0.001, 1) +
+  ylab("Normalised minimum percolation time") +
+  scale_color_brewer("Hardness", palette = "Dark2") + 
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+```
+
+---
+
+## Model selection 
+
+```{r, warning=FALSE, message=FALSE}
+m_full_4 <- lmer(mean_norm ~ Length * Hardness + (1 | Rep), data = eliza4, REML = FALSE)
+m_no_interaction_4 <- lmer(mean_norm ~ Length + Hardness + (1 | Rep), data = eliza4, REML = FALSE)
+anova(m_full_4, m_no_interaction_4)
+```
+
+No statistical difference between the full model and the model without interaction. 
+We'll continue with the model without interaction. 
+
+---
+
+## Model diagnostic
+
+```{r, warning=FALSE, message=FALSE, fig.height=9, fig.width=9}
+diagnostic <- augment(m_no_interaction_4)
+
+a <- ggplot(diagnostic, aes(x = .fitted, y = .wtres)) +
+  geom_point() +
+  geom_hline(yintercept = 0) +
+  geom_smooth(se = FALSE) 
+
+b <- ggplot(diagnostic, aes(x = .fitted, y = sqrt(abs(.wtres)))) +
+  geom_point() +
+  geom_smooth(se = FALSE)
+
+y <- quantile(diagnostic$.resid, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y) / diff(x)
+int   <- y[1] - slope * x[1]     
+c <- ggplot(fortify(m_no_interaction_4), aes(sample = .resid)) +
+  geom_qq() +
+  geom_abline(intercept = int, slope = slope) 
+
+cowplot::plot_grid(a, b, c)
+```
+
+Not perfect, but that'll do. 
+
+---
+
+## Model evaluation
+
+```{r, warning=FALSE, message=FALSE, fig.height=6, fig.width=6}
+sjp.lmer(m_no_interaction_4, type = "fe", prnt.plot = FALSE)$plot +
+  theme_minimal(base_size = 18) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+`r sjt.lmer(m_no_interaction_4, no.output = TRUE, CSS = list(css.table = "width: 100%;"))$knitr`
+
+[Back to top]("#")
+
+---
+
+

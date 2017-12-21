@@ -1,0 +1,259 @@
+---
+title: "Notebook #1"
+author: "Simon Garnier"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    css: custom.css
+    fig_caption: true
+    fig_width: 9
+    fig_height: 6
+    number_sections: true
+    theme: cosmo
+    toc: true
+---
+
+--- 
+
+# Set analysis environment up
+
+```{r, 'setup', message=FALSE, cache=TRUE}
+# load required libraries
+if (!require(pacman)) install.packages("pacman")
+p_load(readr, dplyr, ggplot2, trailClearing)
+
+# load data
+dat <- read_csv("../../data/data.csv") %>%
+  mutate(Treatment = ifelse(Treatment == "LS", "15P", 
+                            ifelse(Treatment == "LH", "15C", 
+                                   ifelse(Treatment == "SS", "5P", "5C"))))
+
+dat_15 <- filter(dat, Treatment == "15P" | Treatment == "15C")
+dat_5 <- filter(dat, Treatment == "5P" | Treatment == "5C")
+
+# calculate percolation distribution for full grids
+full_grid_15 <- makeFullGrid(nrow = 20, ncol = 15)
+distr_full_15 <- percolate2(full_grid_15, n = 100000)
+
+full_grid_5 <- makeFullGrid(nrow = 20, ncol = 5)
+distr_full_5 <- percolate2(full_grid_5, n = 100000)
+```
+
+[Back to top]("#")
+
+---
+
+# Percolation distributions for each sample
+
+```{r, 'perc_distr', message=FALSE, cache=TRUE}
+grids_15 <- group_by(dat_15, Treatment, Rep, Day) %>%
+  do(grid = makeGrid(., nrow = 20, ncol = 15))
+
+grids_5 <- group_by(dat_5, Treatment, Rep, Day) %>%
+  do(grid = makeGrid(., nrow = 20, ncol = 5))
+
+perc_distr_15 <- ungroup(grids_15) %>% group_by(Treatment, Rep, Day) %>%
+  do(perc = percolate2(.$grid[[1]], n = 100000))
+
+perc_distr_5 <- ungroup(grids_5) %>% group_by(Treatment, Rep, Day) %>%
+  do(perc = percolate2(.$grid[[1]], n = 100000))
+
+th_min_15 <- 30
+th_max_15 <- max(c(max(distr_full_15), sapply(perc_distr_15$perc, function(x) max(x)))) - th_min_15
+th_min_5 <- 10
+th_max_5 <- max(c(max(distr_full_5), sapply(perc_distr_5$perc, function(x) max(x)))) - th_min_5
+
+perc_distr_stats_15 <- ungroup(perc_distr_15) %>% group_by(Treatment, Rep, Day) %>%
+  mutate(median = median(perc[[1]]), min = min(perc[[1]]), max = max(perc[[1]])) %>%
+  mutate(median_norm = (median - th_min_15) / th_max_15,
+         min_norm = (min - th_min_15) / th_max_15,
+         max_norm = (max - th_min_15) / th_max_15)
+
+perc_distr_stats_5 <- ungroup(perc_distr_5) %>% group_by(Treatment, Rep, Day) %>%
+  mutate(median = median(perc[[1]]), min = min(perc[[1]]), max = max(perc[[1]])) %>%
+  mutate(median_norm = (median - th_min_5) / th_max_5,
+         min_norm = (min - th_min_5) / th_max_5,
+         max_norm = (max - th_min_5) / th_max_5)
+
+perc_distr_stats <- rbind_list(perc_distr_stats_15, perc_distr_stats_5) %>%
+  mutate(Treatment = factor(Treatment, levels = c("5P", "15P", "5C", "15C")))
+```
+
+```{r, 'perc_distr_1', message=FALSE, cache=TRUE}
+ggplot(perc_distr_stats, aes(x = Treatment, y = median, fill = factor(Day), color = factor(Day))) +
+  geom_boxplot(alpha = 0.5) +
+  ylab("Median percolation time") + 
+  scale_fill_brewer("Day", palette = "Dark2") + 
+  scale_color_brewer("Day", palette = "Dark2") + 
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+```
+<p class="caption">**Figure 1:** Median percolation time (in simulation steps) 
+as a function of treatment (5P, 15P, 5C, and 15C) and observation day (green: 
+day 2; orange: day 4). For each experimental replicate, 100,000 percolation
+simulations were performed and the median percolation time for each replicate is
+reported here. </p>
+
+
+```{r, 'perc_distr_2', message=FALSE, cache=TRUE}
+ggplot(perc_distr_stats, aes(x = Treatment, y = median_norm, fill = factor(Day), color = factor(Day))) +
+  geom_boxplot(alpha = 0.5) +
+  ylim(0, NA) + 
+  ylab("Normalized median percolation time") + 
+  scale_fill_brewer("Day", palette = "Dark2") + 
+  scale_color_brewer("Day", palette = "Dark2") + 
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+```
+<p class="caption">**Figure 2:** Normalized median percolation time (in 
+simulation steps) as a function of treatment (5P, 15P, 5C, and 15C) and 
+observation day (green: day 2; orange: day 4). For each experimental replicate, 
+100,000 percolation simulations were performed. The resulting percolation times 
+were then normalized between the theoretical minimum percolation time (10 steps
+for the 5P and 5C setups; 30 steps for the 15P and 15C setups) and the maximum 
+observed time in the full grid simulations. The normalized median percolation 
+time for each replicate is reported here. </p>
+
+
+```{r, 'perc_distr_3', message=FALSE, cache=TRUE}
+ggplot(perc_distr_stats, aes(x = Treatment, y = min, fill = factor(Day), color = factor(Day))) +
+  geom_boxplot(alpha = 0.5) +
+  ylab("Minimum percolation time") + 
+  scale_fill_brewer("Day", palette = "Dark2") + 
+  scale_color_brewer("Day", palette = "Dark2") + 
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+```
+<p class="caption">**Figure 3:** Minimum percolation time (in simulation steps) 
+as a function of treatment (5P, 15P, 5C, and 15C) and observation day (green: 
+day 2; orange: day 4). For each experimental replicate, 100,000 percolation
+simulations were performed and the minimum percolation time for each replicate 
+is reported here. </p>
+
+
+```{r, 'perc_distr_4', message=FALSE, cache=TRUE}
+ggplot(perc_distr_stats, aes(x = Treatment, y = min_norm, fill = factor(Day), color = factor(Day))) +
+  geom_boxplot(alpha = 0.5) +
+  ylim(0, NA) + 
+  ylab("Normalized minimum percolation time") + 
+  scale_fill_brewer("Day", palette = "Dark2") + 
+  scale_color_brewer("Day", palette = "Dark2") + 
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+```
+<p class="caption">**Figure 4:** Normalized minimum percolation time (in 
+simulation steps) as a function of treatment (5P, 15P, 5C, and 15C) and 
+observation day (green: day 2; orange: day 4). For each experimental replicate, 
+100,000 percolation simulations were performed. The resulting percolation times 
+were then normalized between the theoretical minimum percolation time (10 steps
+for the 5P and 5C setups; 30 steps for the 15P and 15C setups) and the maximum 
+observed time in the full grid simulations. The normalized minimum percolation 
+time for each replicate is reported here. </p>
+
+
+```{r, 'perc_distr_5', message=FALSE, cache=TRUE}
+ggplot(perc_distr_stats, aes(x = Treatment, y = max, fill = factor(Day), color = factor(Day))) +
+  geom_boxplot(alpha = 0.5) +
+  ylab("Maximum percolation time") + 
+  scale_fill_brewer("Day", palette = "Dark2") + 
+  scale_color_brewer("Day", palette = "Dark2") + 
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+```
+<p class="caption">**Figure 5:** Maximum percolation time (in simulation steps) 
+as a function of treatment (5P, 15P, 5C, and 15C) and observation day (green: 
+day 2; orange: day 4). For each experimental replicate, 100,000 percolation
+simulations were performed and the maximum percolation time for each replicate 
+is reported here. </p>
+
+```{r, 'perc_distr_6', message=FALSE, cache=TRUE}
+ggplot(perc_distr_stats, aes(x = Treatment, y = max_norm, fill = factor(Day), color = factor(Day))) +
+  geom_boxplot(alpha = 0.5) +
+  ylim(0, NA) + 
+  ylab("Normalized maximum percolation time") + 
+  scale_fill_brewer("Day", palette = "Dark2") + 
+  scale_color_brewer("Day", palette = "Dark2") + 
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+```
+<p class="caption">**Figure 6:** Normalized maximum percolation time (in 
+simulation steps) as a function of treatment (5P, 15P, 5C, and 15C) and 
+observation day (green: day 2; orange: day 4). For each experimental replicate, 
+100,000 percolation simulations were performed. The resulting percolation times 
+were then normalized between the theoretical minimum percolation time (10 steps
+for the 5P and 5C setups; 30 steps for the 15P and 15C setups) and the maximum 
+observed time in the full grid simulations. The normalized maximum percolation 
+time for each replicate is reported here. </p>
+
+
+[Back to top]("#")
+
+---
+
+# Overlap between percolation distributions of full and experimental grids
+
+```{r, 'overlap', message=FALSE, cache=TRUE}
+ovrlp_15 <- ungroup(perc_distr_15) %>% group_by(Treatment, Rep, Day) %>%
+  mutate(overlap = overlap(distr_full_15, perc[[1]]))
+
+ovrlp_5 <- ungroup(perc_distr_5) %>% group_by(Treatment, Rep, Day) %>%
+  mutate(overlap = overlap(distr_full_5, perc[[1]]))
+
+ovrlp <- rbind_list(ovrlp_15, ovrlp_5) %>%
+  mutate(Treatment = factor(Treatment, levels = c("5P", "15P", "5C", "15C")))
+
+ggplot(ovrlp, aes(x = Treatment, y = overlap * 100, fill = factor(Day), color = factor(Day))) +
+  geom_boxplot(alpha = 0.5) +
+  ylab("% overlap with full grid") + 
+  scale_fill_brewer("Day", palette = "Dark2") + 
+  scale_color_brewer("Day", palette = "Dark2") + 
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+```
+<p class="caption">**Figure 7:** Percentage overlap between the distributions of 
+the simulated percolation times for the observed grids and the full grid. For 
+each experimental replicate, 100,000 percolation simulations were performed and
+the resulting distribution was compared to the distribution of 100,000 simulated
+percolation time for a full grid (i.e. uncut). The percentage overlap between
+these two distributions is reported here. An overlap of 100% means that the 2 
+distributions are exactly identical. An overlap of 0% means that the 2 
+distributions are completely separated from each other. </p>
+
+
+[Back to top]("#")
+
+---
+
+# Comparison with random cutting
+
+```{r, 'random', message=FALSE, cache=TRUE}
+rnd_dat <- read_csv("../../data/par2.csv", col_types = "nnnnn")
+
+res <- c()
+for (i in 1:nrow(ovrlp)) {
+  tmp <- filter(rnd_dat, idx == i)
+  res <- c(res, sum(ovrlp[i, ]$overlap > tmp$overlap) / nrow(tmp))
+}
+
+ovrlp$rnd <- res
+
+ggplot(ovrlp, aes(x = Treatment, y = rnd * 100, fill = factor(Day), color = factor(Day))) +
+  geom_dotplot(binaxis = "y", stackdir = "center", binwidth = 1, position = "dodge") +
+  ylab("> x % of random overlap") + 
+  geom_hline(yintercept = c(5, 25, 50, 75, 95), linetype = 2, alpha = c(1, 0.25, 1, 0.25, 1)) +
+  geom_vline(xintercept = c(0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5), 
+             alpha = c(0.5, 0.1, 0.5, 0.1, 0.5, 0.1, 0.5, 0.1, 0.5)) +
+  scale_fill_brewer("Day", palette = "Dark2") + 
+  scale_color_brewer("Day", palette = "Dark2") + 
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "top")
+```
+<p class="caption">**Figure 8:**  </p>
+
+
+[Back to top]("#")
+
+---
+
+
+
